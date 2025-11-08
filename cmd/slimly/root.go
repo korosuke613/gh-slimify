@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var workflowFiles []string
+
 func newRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "slimfy",
@@ -21,6 +23,8 @@ It analyzes .github/workflows/*.yml files and identifies jobs that can be safely
 migrated based on migration criteria.`,
 		Run: runScan,
 	}
+
+	rootCmd.PersistentFlags().StringArrayVarP(&workflowFiles, "file", "f", []string{}, "Specify workflow file(s) to process. If not specified, all files in .github/workflows/*.yml are processed. Can be specified multiple times (e.g., -f .github/workflows/ci.yml -f .github/workflows/test.yml)")
 
 	fixCmd := &cobra.Command{
 		Use:   "fix",
@@ -35,7 +39,7 @@ all migration criteria.`,
 }
 
 func runScan(cmd *cobra.Command, args []string) {
-	candidates, err := scan.Scan()
+	candidates, err := scan.Scan(workflowFiles...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -72,7 +76,7 @@ func runScan(cmd *cobra.Command, args []string) {
 }
 
 func runFix(cmd *cobra.Command, args []string) {
-	candidates, err := scan.Scan()
+	candidates, err := scan.Scan(workflowFiles...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

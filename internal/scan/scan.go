@@ -16,15 +16,33 @@ type Candidate struct {
 }
 
 // Scan scans workflows and returns migration candidates
-func Scan() ([]*Candidate, error) {
-	workflows, err := workflow.LoadWorkflows()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load workflows: %w", err)
-	}
+// If paths are provided, only those files are scanned. Otherwise, all workflow files
+// in .github/workflows are scanned.
+func Scan(paths ...string) ([]*Candidate, error) {
+	var workflows []*workflow.Workflow
+	var err error
 
-	if len(workflows) == 0 {
-		fmt.Fprintf(os.Stderr, "No workflow files found in .github/workflows\n")
-		return nil, nil
+	if len(paths) > 0 {
+		// Load only specified files
+		workflows = make([]*workflow.Workflow, 0, len(paths))
+		for _, path := range paths {
+			wf, err := workflow.LoadWorkflow(path)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load workflow %s: %w", path, err)
+			}
+			workflows = append(workflows, wf)
+		}
+	} else {
+		// Load all workflows
+		workflows, err = workflow.LoadWorkflows()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load workflows: %w", err)
+		}
+
+		if len(workflows) == 0 {
+			fmt.Fprintf(os.Stderr, "No workflow files found in .github/workflows\n")
+			return nil, nil
+		}
 	}
 
 	var candidates []*Candidate
