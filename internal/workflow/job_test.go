@@ -220,7 +220,7 @@ echo "Done"`,
 	}
 }
 
-func TestJob_HasDockerActions_EdgeCases(t *testing.T) {
+func TestJob_HasContainerActions_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name     string
 		job      *Job
@@ -366,9 +366,9 @@ func TestJob_HasDockerActions_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.job.HasDockerActions()
+			got := tt.job.HasContainerActions()
 			if got != tt.expected {
-				t.Errorf("HasDockerActions() = %v, want %v", got, tt.expected)
+				t.Errorf("HasContainerActions() = %v, want %v", got, tt.expected)
 			}
 		})
 	}
@@ -454,6 +454,80 @@ func TestJob_HasServices_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestJob_HasContainer_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		job      *Job
+		expected bool
+	}{
+		{
+			name: "nil container",
+			job: &Job{
+				Container: nil,
+			},
+			expected: false,
+		},
+		{
+			name: "container with image string",
+			job: &Job{
+				Container: "node:18",
+			},
+			expected: true,
+		},
+		{
+			name: "container with image map",
+			job: &Job{
+				Container: map[string]any{
+					"image": "node:18",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "container with image and options",
+			job: &Job{
+				Container: map[string]any{
+					"image": "node:18",
+					"env": map[string]string{
+						"NODE_ENV": "test",
+					},
+					"ports": []int{3000},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "container with credentials",
+			job: &Job{
+				Container: map[string]any{
+					"image": "ghcr.io/private/image:latest",
+					"credentials": map[string]string{
+						"username": "${{ secrets.USERNAME }}",
+						"password": "${{ secrets.PASSWORD }}",
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "empty container map",
+			job: &Job{
+				Container: map[string]any{},
+			},
+			expected: true, // Non-nil means container is defined
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.job.HasContainer()
+			if got != tt.expected {
+				t.Errorf("HasContainer() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestJob_CombinedChecks(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -462,56 +536,79 @@ func TestJob_CombinedChecks(t *testing.T) {
 		wantDockerCmd  bool
 		wantDockerAct  bool
 		wantServices   bool
+		wantContainer  bool
 	}{
 		{
 			name: "fully eligible job",
 			job: &Job{
-				RunsOn:   "ubuntu-latest",
-				Steps:    []Step{{Run: "echo hello"}},
-				Services: nil,
+				RunsOn:    "ubuntu-latest",
+				Steps:     []Step{{Run: "echo hello"}},
+				Services:  nil,
+				Container: nil,
 			},
 			wantUbuntu:    true,
 			wantDockerCmd: false,
 			wantDockerAct: false,
 			wantServices:  false,
+			wantContainer: false,
 		},
 		{
 			name: "job with docker command",
 			job: &Job{
-				RunsOn:   "ubuntu-latest",
-				Steps:    []Step{{Run: "docker build -t app ."}},
-				Services: nil,
+				RunsOn:    "ubuntu-latest",
+				Steps:     []Step{{Run: "docker build -t app ."}},
+				Services:  nil,
+				Container: nil,
 			},
 			wantUbuntu:    true,
 			wantDockerCmd: true,
 			wantDockerAct: false,
 			wantServices:  false,
+			wantContainer: false,
 		},
 		{
 			name: "job with docker action",
 			job: &Job{
-				RunsOn:   "ubuntu-latest",
-				Steps:    []Step{{Uses: "docker/build-push-action@v6"}},
-				Services: nil,
+				RunsOn:    "ubuntu-latest",
+				Steps:     []Step{{Uses: "docker/build-push-action@v6"}},
+				Services:  nil,
+				Container: nil,
 			},
 			wantUbuntu:    true,
 			wantDockerCmd: false,
 			wantDockerAct: true,
 			wantServices:  false,
+			wantContainer: false,
 		},
 		{
 			name: "job with services",
 			job: &Job{
-				RunsOn: "ubuntu-latest",
-				Steps:  []Step{{Run: "echo hello"}},
+				RunsOn:    "ubuntu-latest",
+				Steps:     []Step{{Run: "echo hello"}},
 				Services: map[string]any{
 					"postgres": map[string]any{},
 				},
+				Container: nil,
 			},
 			wantUbuntu:    true,
 			wantDockerCmd: false,
 			wantDockerAct: false,
 			wantServices:  true,
+			wantContainer: false,
+		},
+		{
+			name: "job with container",
+			job: &Job{
+				RunsOn:    "ubuntu-latest",
+				Steps:     []Step{{Run: "node --version"}},
+				Services:  nil,
+				Container: "node:18",
+			},
+			wantUbuntu:    true,
+			wantDockerCmd: false,
+			wantDockerAct: false,
+			wantServices:  false,
+			wantContainer: true,
 		},
 		{
 			name: "job with all disqualifiers",
@@ -524,23 +621,27 @@ func TestJob_CombinedChecks(t *testing.T) {
 				Services: map[string]any{
 					"postgres": map[string]any{},
 				},
+				Container: "node:18",
 			},
 			wantUbuntu:    true,
 			wantDockerCmd: true,
 			wantDockerAct: true,
 			wantServices:  true,
+			wantContainer: true,
 		},
 		{
 			name: "non-ubuntu runner",
 			job: &Job{
-				RunsOn:   "ubuntu-22.04",
-				Steps:    []Step{{Run: "echo hello"}},
-				Services: nil,
+				RunsOn:    "ubuntu-22.04",
+				Steps:     []Step{{Run: "echo hello"}},
+				Services:  nil,
+				Container: nil,
 			},
 			wantUbuntu:    false,
 			wantDockerCmd: false,
 			wantDockerAct: false,
 			wantServices:  false,
+			wantContainer: false,
 		},
 	}
 
@@ -552,11 +653,14 @@ func TestJob_CombinedChecks(t *testing.T) {
 			if got := tt.job.HasDockerCommands(); got != tt.wantDockerCmd {
 				t.Errorf("HasDockerCommands() = %v, want %v", got, tt.wantDockerCmd)
 			}
-			if got := tt.job.HasDockerActions(); got != tt.wantDockerAct {
-				t.Errorf("HasDockerActions() = %v, want %v", got, tt.wantDockerAct)
+			if got := tt.job.HasContainerActions(); got != tt.wantDockerAct {
+				t.Errorf("HasContainerActions() = %v, want %v", got, tt.wantDockerAct)
 			}
 			if got := tt.job.HasServices(); got != tt.wantServices {
 				t.Errorf("HasServices() = %v, want %v", got, tt.wantServices)
+			}
+			if got := tt.job.HasContainer(); got != tt.wantContainer {
+				t.Errorf("HasContainer() = %v, want %v", got, tt.wantContainer)
 			}
 		})
 	}

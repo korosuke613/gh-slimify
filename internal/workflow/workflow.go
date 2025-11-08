@@ -21,6 +21,7 @@ type Job struct {
 	RunsOn    interface{} `yaml:"runs-on"`
 	Steps     []Step      `yaml:"steps"`
 	Services  interface{} `yaml:"services"`
+	Container interface{} `yaml:"container"`
 	LineStart int         // Line number where the job starts
 }
 

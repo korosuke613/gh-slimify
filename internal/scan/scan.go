@@ -49,9 +49,10 @@ func Scan() ([]*Candidate, error) {
 // Criteria:
 // 1. Runs on ubuntu-latest
 // 2. Does not use Docker commands
-// 3. Does not use Docker-based GitHub Actions
-// 4. Does not use services
-// 5. Duration check will be added later via GitHub API
+// 3. Does not use container-based GitHub Actions
+// 4. Does not use services containers (e.g. services:)
+// 5. Does not run steps inside a Docker container. (e.g. container:)
+// 6. Duration check will be added later via GitHub API
 func isEligible(job *workflow.Job) bool {
 	// Criterion 1: Must run on ubuntu-latest
 	if !job.IsUbuntuLatest() {
@@ -63,8 +64,8 @@ func isEligible(job *workflow.Job) bool {
 		return false
 	}
 
-	// Criterion 3: Must not use Docker-based GitHub Actions
-	if job.HasDockerActions() {
+	// Criterion 3: Must not use container-based GitHub Actions
+	if job.HasContainerActions() {
 		return false
 	}
 
@@ -73,7 +74,12 @@ func isEligible(job *workflow.Job) bool {
 		return false
 	}
 
-	// Criterion 5: Duration check will be done via GitHub API
+	// Criterion 5: Must not use container: syntax
+	if job.HasContainer() {
+		return false
+	}
+
+	// Criterion 6: Duration check will be done via GitHub API
 	// TODO: Implement duration check via GitHub API
 
 	return true

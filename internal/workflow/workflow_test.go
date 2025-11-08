@@ -680,7 +680,7 @@ func TestJob_HasDockerCommands(t *testing.T) {
 	}
 }
 
-func TestJob_HasDockerActions(t *testing.T) {
+func TestJob_HasContainerActions(t *testing.T) {
 	tests := []struct {
 		name     string
 		job      *Job
@@ -749,9 +749,9 @@ func TestJob_HasDockerActions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.job.HasDockerActions()
+			got := tt.job.HasContainerActions()
 			if got != tt.expected {
-				t.Errorf("HasDockerActions() = %v, want %v", got, tt.expected)
+				t.Errorf("HasContainerActions() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

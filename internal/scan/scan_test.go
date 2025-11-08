@@ -153,6 +153,26 @@ func TestIsEligible_UbuntuLatest(t *testing.T) {
 			expected: false,
 		},
 		{
+			name: "not eligible - has container",
+			job: &workflow.Job{
+				RunsOn:    "ubuntu-latest",
+				Steps:     []workflow.Step{{Run: "node --version"}},
+				Services:  nil,
+				Container: "node:18",
+			},
+			expected: false,
+		},
+		{
+			name: "not eligible - has container with map",
+			job: &workflow.Job{
+				RunsOn:    "ubuntu-latest",
+				Steps:     []workflow.Step{{Run: "node --version"}},
+				Services:  nil,
+				Container: map[string]interface{}{"image": "node:18"},
+			},
+			expected: false,
+		},
+		{
 			name: "eligible - case insensitive docker check",
 			job: &workflow.Job{
 				RunsOn:   "ubuntu-latest",
@@ -328,6 +348,22 @@ jobs:
 			expectError:   false,
 		},
 		{
+			name:     "job with container - not eligible",
+			filename: "container.yml",
+			content: `name: container
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: node:18
+    steps:
+      - run: node --version`,
+			expectedCount: 0,
+			expectedJobs:  []string{},
+			expectError:   false,
+		},
+		{
 			name:     "multiple jobs - mixed eligibility",
 			filename: "mixed.yml",
 			content: `name: mixed
@@ -344,7 +380,13 @@ jobs:
   not-eligible-runner:
     runs-on: ubuntu-22.04
     steps:
-      - run: echo "hello"`,
+      - run: echo "hello"
+  not-eligible-container:
+    runs-on: ubuntu-latest
+    container:
+      image: node:18
+    steps:
+      - run: node --version`,
 			expectedCount: 1,
 			expectedJobs:  []string{"eligible"},
 			expectError:   false,
