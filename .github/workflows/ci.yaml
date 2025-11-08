@@ -54,6 +54,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Build
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
