@@ -1,9 +1,12 @@
 package scan
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/fchimpan/gh-slimify/internal/api"
 	"github.com/fchimpan/gh-slimify/internal/workflow"
 )
 
@@ -60,6 +63,12 @@ func Scan(paths ...string) ([]*Candidate, error) {
 		}
 	}
 
+	// Fetch duration from GitHub API for each candidate
+	if err := fetchDurations(candidates); err != nil {
+		// Log error but don't fail the scan
+		fmt.Fprintf(os.Stderr, "Warning: failed to fetch job durations from GitHub API: %v\n", err)
+	}
+
 	return candidates, nil
 }
 
@@ -98,7 +107,64 @@ func isEligible(job *workflow.Job) bool {
 	}
 
 	// Criterion 6: Duration check will be done via GitHub API
-	// TODO: Implement duration check via GitHub API
+	// Duration is fetched after eligibility check to avoid blocking on API calls
 
 	return true
+}
+
+// fetchDurations fetches job execution durations from GitHub API
+func fetchDurations(candidates []*Candidate) error {
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	// Get repository info from git remote
+	host, owner, repo, err := api.GetRepoInfo()
+	if err != nil {
+		return fmt.Errorf("failed to get repository info: %w", err)
+	}
+
+	// Create API client
+	client, err := api.NewClient(host, owner, repo)
+	if err != nil {
+		return fmt.Errorf("failed to create API client: %w", err)
+	}
+
+	ctx := context.Background()
+
+	// Fetch duration for each candidate
+	for _, candidate := range candidates {
+		duration, err := client.GetJobDuration(ctx, candidate.WorkflowPath, candidate.JobName)
+		if err != nil {
+			// Log error for debugging but continue to next candidate
+			fmt.Fprintf(os.Stderr, "Warning: failed to get duration for job %s in %s: %v\n", candidate.JobName, candidate.WorkflowPath, err)
+			continue
+		}
+
+		// Format duration as human-readable string
+		candidate.Duration = formatDuration(duration.Duration)
+	}
+
+	return nil
+}
+
+// formatDuration formats a duration as a human-readable string
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.0fs", d.Seconds())
+	}
+	if d < time.Hour {
+		minutes := int(d.Minutes())
+		seconds := int(d.Seconds()) % 60
+		if seconds == 0 {
+			return fmt.Sprintf("%dm", minutes)
+		}
+		return fmt.Sprintf("%dm%ds", minutes, seconds)
+	}
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if minutes == 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dh%dm", hours, minutes)
 }
