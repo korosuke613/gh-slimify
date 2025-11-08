@@ -19,15 +19,6 @@ GitHub Actions recently introduced the lightweight `ubuntu-slim` runner (1 vCPU 
 
 **`gh-slimify` automates this entire process**, analyzing your workflows and safely migrating eligible jobs with a single command.
 
-## ✨ Benefits
-
-- **💰 Cost Savings**: `ubuntu-slim` runners are optimized for lightweight jobs, reducing CI costs
-- **⚡ Faster Startup**: Slim runners start faster than standard runners
-- **🛡️ Safe Migration**: Automatically detects incompatible patterns (Docker, services, containers)
-- **📊 Smart Analysis**: Checks actual job durations from GitHub API to ensure compatibility
-- **🎯 Precise Updates**: Shows exact file paths and line numbers for each candidate job
-- **🔄 One-Click Fix**: Automatically updates workflows with `gh slimfy fix`
-
 ## 📦 Installation
 
 Install as a GitHub CLI extension:
@@ -38,30 +29,10 @@ gh extension install fchimpan/gh-slimify
 
 ## 🚀 Quick Start
 
+Get help:
 
 ```bash
 $ gh slimfy --help
-slimfy is a GitHub CLI extension that automatically detects and safely migrates
-eligible ubuntu-latest jobs to ubuntu-slim.
-
-It analyzes .github/workflows/*.yml files and identifies jobs that can be safely
-migrated based on migration criteria.
-
-Usage:
-  slimfy [flags]
-  slimfy [command]
-
-Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  fix         Automatically update workflows to use ubuntu-slim
-  help        Help about any command
-
-Flags:
-  -f, --file stringArray   Specify workflow file(s) to process. If not specified, all files in .github/workflows/*.yml are processed. Can be specified multiple times (e.g., -f .github/workflows/ci.yml -f .github/workflows/test.yml)
-  -h, --help               help for slimfy
-      --skip-duration      Skip fetching job execution durations from GitHub API to avoid unnecessary API calls
-
-Use "slimfy [command] --help" for more information about a command.
 ```
 
 ### Scan Workflows
@@ -75,33 +46,60 @@ gh slimfy
 **Example Output:**
 
 ```
-.github/workflows/lint.yml
-  - job "lint" (L8) → ubuntu-slim compatible (last run: 4m) /path/to/.github/workflows/lint.yml:8
+📄 .github/workflows/lint.yml
+  ✅ Safe to migrate (1 job(s)):
+     • "lint" (L8) - Last execution time: 4m
+       .github/workflows/lint.yml:8
+  ⚠️  Can migrate but requires attention (1 job(s)):
+     • "build" (L15)
+       ⚠️  Setup may be required (go), Last execution time: unknown
+       .github/workflows/lint.yml:15
 
-.github/workflows/test.yml
-  - job "unit-test" (L12) → ubuntu-slim compatible (last run: 9m) /path/to/.github/workflows/test.yml:12
-
-Total: 2 job(s) can be safely migrated.
+✅ 1 job(s) can be safely migrated
+⚠️  1 job(s) can be migrated but require attention
+📊 Total: 2 job(s) eligible for migration
 ```
+
+The output shows:
+- **✅ Safe to migrate**: Jobs with no missing commands and known execution time
+- **⚠️ Can migrate but requires attention**: Jobs with missing commands or unknown execution time
+- **Warning reasons**: Displayed in a single line for easy understanding
+- **Relative file paths**: Clickable links that work in VS Code, iTerm2, and other terminal emulators
 
 ### Auto-Fix Workflows
 
-Automatically update eligible jobs to use `ubuntu-slim`:
+Automatically update eligible jobs to use `ubuntu-slim`. By default, only safe jobs (no missing commands and known execution time) are updated:
 
 ```bash
 gh slimfy fix
 ```
 
-**Example Output:**
+**Example Output (default - safe jobs only):**
 
 ```
-Updating workflows to use ubuntu-slim...
+Updating workflows to use ubuntu-slim (safe jobs only)...
+Skipping 1 job(s) with warnings. Use --force to update them.
 
 Updating .github/workflows/lint.yml
   ✓ Updated job "lint" (L8) → ubuntu-slim
 
-Updating .github/workflows/test.yml
-  ✓ Updated job "unit-test" (L12) → ubuntu-slim
+Successfully updated 1 job(s) to use ubuntu-slim.
+```
+
+To also update jobs with warnings (missing commands or unknown execution time), use the `--force` flag:
+
+```bash
+gh slimfy fix --force
+```
+
+**Example Output (with --force):**
+
+```
+Updating workflows to use ubuntu-slim (including jobs with warnings)...
+
+Updating .github/workflows/lint.yml
+  ⚠️  Updated job "build" (L15) → ubuntu-slim (with warnings)
+  ✓ Updated job "lint" (L8) → ubuntu-slim
 
 Successfully updated 2 job(s) to use ubuntu-slim.
 ```
@@ -118,16 +116,33 @@ gh slimfy -f .github/workflows/ci.yml -f .github/workflows/test.yml
 
 ### Skip Duration Check
 
-Skip fetching job durations from GitHub API (useful for faster scans or when API access is unavailable):
+Skip fetching job durations from GitHub API. This is useful for:
+- **API rate limit management**: Avoid hitting GitHub API rate limits when scanning many workflows
+- **Faster scans**: Skip API calls for quicker results
+- **When API access is unavailable**: Use when GitHub API is not accessible
 
 ```bash
 gh slimfy --skip-duration
 ```
 
+Use the `--verbose` flag to enable debug output, which can help troubleshoot issues with API calls or workflow parsing:
+
+```bash
+gh slimfy --verbose
+```
+
+### Force Update Jobs with Warnings
+
+Update jobs with warnings (missing commands or unknown execution time):
+
+```bash
+gh slimfy fix --force
+```
+
 ### Combine Options
 
 ```bash
-gh slimfy fix -f .github/workflows/ci.yml --skip-duration
+gh slimfy fix -f .github/workflows/ci.yml --skip-duration --force
 ```
 
 ## 🔍 Migration Criteria
@@ -139,9 +154,22 @@ A job is eligible for migration to `ubuntu-slim` if **all** of the following con
 3. ✅ Does **not** use Docker-based GitHub Actions (e.g., `docker/build-push-action`, `docker/login-action`)
 4. ✅ Does **not** use `services:` containers (PostgreSQL, Redis, MySQL, etc.)
 5. ✅ Does **not** use `container:` syntax (jobs running inside Docker containers)
-6. ✅ Latest workflow run duration is **under 15 minutes**
+6. ✅ Latest workflow run duration is **under 15 minutes** (checked via GitHub API)
+7. ⚠️ Jobs using commands that exist in `ubuntu-latest` but not in `ubuntu-slim` (e.g. `nvm`) will be flagged with warnings but are still eligible for migration. You may need to add setup steps to install these tools in `ubuntu-slim`.
+
+> [!NOTE]
+> The missing command detection is not complete. It cannot detect commands installed via setup actions (e.g., `actions/setup-go@v5`). These actions typically install tools that may not be available in `ubuntu-slim` by default, so manual verification is recommended.
 
 If any condition is violated, the job will **not** be migrated.
+
+### Job Status Classification
+
+Jobs are classified into two categories:
+
+- **✅ Safe to migrate**: No missing commands and execution time is known
+- **⚠️ Can migrate but requires attention**: Has missing commands or execution time is unknown
+
+Missing commands are tools that exist in `ubuntu-latest` but need to be installed in `ubuntu-slim` (e.g., `nvm`). These jobs can still be migrated, but you may need to add setup steps to install the required tools.
 
 ## 📝 Examples
 
@@ -207,30 +235,19 @@ jobs:
 
 1. **Parse Workflows**: Scans `.github/workflows/*.yml` files and parses job definitions
 2. **Check Criteria**: Evaluates each job against migration criteria (Docker, services, containers)
-3. **Fetch Durations**: Retrieves latest job execution times from GitHub API (unless `--skip-duration` is used)
-4. **Report Results**: Displays eligible jobs with file paths, line numbers, and execution durations
-5. **Auto-Fix** (optional): Updates `runs-on: ubuntu-latest` to `runs-on: ubuntu-slim` for safe jobs
+3. **Detect Missing Commands**: Identifies commands used in jobs that exist in `ubuntu-latest` but not in `ubuntu-slim`
+4. **Fetch Durations**: Retrieves latest job execution times from GitHub API (unless `--skip-duration` is used)
+5. **Classify Jobs**: Separates jobs into "safe" (no warnings) and "requires attention" (has warnings) categories
+6. **Report Results**: Displays eligible jobs grouped by status with:
+   - Visual indicators (✅ for safe, ⚠️ for warnings)
+   - Warning reasons in a single line
+   - Relative file paths with line numbers (clickable in most terminals)
+   - Execution durations
+7. **Auto-Fix** (optional): Updates `runs-on: ubuntu-latest` to `runs-on: ubuntu-slim`:
+   - By default: Only safe jobs are updated
+   - With `--force`: All eligible jobs (including those with warnings) are updated
 
-## 🔗 Links
-
-- **File Links**: Output includes clickable file links (e.g., `file://path/to/workflow.yml:8`) that work in VS Code, iTerm2, and other terminal emulators
-- **GitHub API**: Automatically uses your `gh` CLI authentication for API calls
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built for the GitHub Actions community
-- Inspired by the need for cost-efficient CI/CD workflows
-- Uses [Cobra](https://github.com/spf13/cobra) for CLI functionality
-
----
-
-**Made with ❤️ for faster, cheaper CI**
-
+MIT License
