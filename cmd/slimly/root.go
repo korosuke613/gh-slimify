@@ -14,6 +14,7 @@ var (
 	workflowFiles []string
 	skipDuration  bool
 	verbose       bool
+	force         bool
 )
 
 func newRootCmd() *cobra.Command {
@@ -36,9 +37,11 @@ migrated based on migration criteria.`,
 		Use:   "fix",
 		Short: "Automatically update workflows to use ubuntu-slim",
 		Long: `Replace runs-on: ubuntu-latest with ubuntu-slim for safe jobs that meet
-all migration criteria.`,
+all migration criteria. By default, only safe jobs (no missing commands and known execution time)
+are updated. Use --force to also update jobs with warnings.`,
 		Run: runFix,
 	}
+	fixCmd.Flags().BoolVar(&force, "force", false, "Also update jobs with warnings (missing commands or unknown execution time)")
 
 	rootCmd.AddCommand(fixCmd)
 	return rootCmd
@@ -184,12 +187,54 @@ func runFix(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	fmt.Println("Updating workflows to use ubuntu-slim...")
+	// Filter candidates based on force flag
+	// Safe jobs: no missing commands AND execution time is known
+	// Warning jobs: missing commands OR execution time is unknown
+	var jobsToUpdate []*scan.Candidate
+	var skippedJobs []*scan.Candidate
+
+	for _, job := range candidates {
+		duration := job.Duration
+		if duration == "" {
+			duration = "unknown"
+		}
+		hasMissingCommands := len(job.MissingCommands) > 0
+		hasUnknownDuration := duration == "unknown"
+
+		if hasMissingCommands || hasUnknownDuration {
+			if force {
+				jobsToUpdate = append(jobsToUpdate, job)
+			} else {
+				skippedJobs = append(skippedJobs, job)
+			}
+		} else {
+			jobsToUpdate = append(jobsToUpdate, job)
+		}
+	}
+
+	if len(jobsToUpdate) == 0 {
+		if len(skippedJobs) > 0 {
+			fmt.Printf("No safe jobs to update. %d job(s) have warnings and were skipped.\n", len(skippedJobs))
+			fmt.Println("Use --force to update jobs with warnings.")
+		} else {
+			fmt.Println("No jobs found that can be safely migrated to ubuntu-slim.")
+		}
+		return
+	}
+
+	if force {
+		fmt.Println("Updating workflows to use ubuntu-slim (including jobs with warnings)...")
+	} else {
+		fmt.Println("Updating workflows to use ubuntu-slim (safe jobs only)...")
+		if len(skippedJobs) > 0 {
+			fmt.Printf("Skipping %d job(s) with warnings. Use --force to update them.\n", len(skippedJobs))
+		}
+	}
 	fmt.Println()
 
-	// Group candidates by workflow file
+	// Group jobs by workflow file
 	workflowMap := make(map[string][]*scan.Candidate)
-	for _, c := range candidates {
+	for _, c := range jobsToUpdate {
 		workflowMap[c.WorkflowPath] = append(workflowMap[c.WorkflowPath], c)
 	}
 
@@ -221,7 +266,19 @@ func runFix(cmd *cobra.Command, args []string) {
 				continue
 			}
 
-			fmt.Printf("  ✓ Updated job \"%s\" (L%d) → ubuntu-slim\n", job.JobName, job.LineNumber)
+			// Show warning indicator if job has warnings
+			duration := job.Duration
+			if duration == "" {
+				duration = "unknown"
+			}
+			hasMissingCommands := len(job.MissingCommands) > 0
+			hasUnknownDuration := duration == "unknown"
+
+			if hasMissingCommands || hasUnknownDuration {
+				fmt.Printf("  ⚠️  Updated job \"%s\" (L%d) → ubuntu-slim (with warnings)\n", job.JobName, job.LineNumber)
+			} else {
+				fmt.Printf("  ✓ Updated job \"%s\" (L%d) → ubuntu-slim\n", job.JobName, job.LineNumber)
+			}
 			updatedCount++
 		}
 		fmt.Println()
