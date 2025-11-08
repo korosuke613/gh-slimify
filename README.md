@@ -29,6 +29,9 @@ gh extension install fchimpan/gh-slimify
 
 ## 🚀 Quick Start
 
+> [!IMPORTANT]
+> All commands must be executed from the **repository root directory** (where `.github/workflows/` is located).
+
 Get help:
 
 ```bash
