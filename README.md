@@ -8,6 +8,9 @@
 >`ubuntu-slim` is currently in **public preview** and may change before general availability. 
 >Please review GitHub's official documentation for the latest updates and breaking changes.
 
+> [!NOTE]
+> At the time of writing, GitHub has not officially published a list of tools pre-installed on `ubuntu-slim` runners. Therefore, the tool detection for missing commands is **uncertain** and based on assumptions. The tool may incorrectly flag commands as missing (false positives) or miss commands that are actually missing (false negatives). Always verify manually before migrating critical workflows.
+
 ## 🎯 Motivation
 
 GitHub Actions recently introduced the lightweight `ubuntu-slim` runner (1 vCPU / 5 GB RAM, max 15 min runtime) as a cost-efficient alternative to `ubuntu-latest`. However, manually identifying which workflows can safely migrate is tedious and error-prone:
