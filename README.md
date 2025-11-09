@@ -52,7 +52,6 @@ gh extension install fchimpan/gh-slimify
 >    # List jobs from that run to inspect start/completion times
 >    gh api \
 >      repos/{owner}/{repo}/actions/runs/${id}/jobs | jq '.jobs[] | {name: .name, started_at: .started_at, completed_at: .completed_at}'
-
 > 
 > Based on these rules, review each workflow and migrate every eligible job to ubuntu-slim. Afterward, report both the jobs that were successfully migrated and, for those that were not, the specific reasons they were ineligible.
 > ```
