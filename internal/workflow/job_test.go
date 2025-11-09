@@ -787,6 +787,179 @@ lsof -i :8080`},
 			},
 			expectedMissing: nil,
 		},
+		{
+			name: "job with setup-go should not report go as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "actions/setup-go@v5"},
+					{Run: "go fmt ./..."},
+					{Run: "go test ./..."},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-go and other missing commands",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "actions/setup-go@v5"},
+					{Run: "go fmt ./..."},
+					{Run: "docker ps"},
+				},
+			},
+			expectedMissing: []string{"docker"},
+		},
+		{
+			name: "job with setup-node should not report node/npm/npx as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "actions/setup-node@v4"},
+					{Run: "npm install"},
+					{Run: "npx eslint ."},
+					{Run: "node script.js"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-python should not report python/pip as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "actions/setup-python@v5"},
+					{Run: "python -m pytest"},
+					{Run: "pip install -r requirements.txt"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-ruby should not report ruby/gem as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "actions/setup-ruby@v1"},
+					{Run: "ruby script.rb"},
+					{Run: "gem install bundler"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-java should not report java/javac/mvn/gradle as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "actions/setup-java@v4"},
+					{Run: "java -version"},
+					{Run: "javac Main.java"},
+					{Run: "mvn test"},
+					{Run: "gradle build"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with multiple setup actions",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "actions/setup-go@v5"},
+					{Uses: "actions/setup-node@v4"},
+					{Run: "go build"},
+					{Run: "npm install"},
+					{Run: "docker ps"},
+				},
+			},
+			expectedMissing: []string{"docker"},
+		},
+		{
+			name: "job without setup-go should report go as missing if it's missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Run: "go fmt ./..."},
+				},
+			},
+			// Note: This test assumes "go" is in the missing commands list
+			// If "go" is actually available in ubuntu-slim, this test may need adjustment
+			expectedMissing: []string{"go"},
+		},
+		{
+			name: "job with setup-dotnet should not report dotnet as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "actions/setup-dotnet@v4"},
+					{Run: "dotnet build"},
+					{Run: "dotnet test"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-bun should not report bun as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "oven-sh/setup-bun@v1"},
+					{Run: "bun install"},
+					{Run: "bun test"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-deno should not report deno as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "denoland/setup-deno@v1"},
+					{Run: "deno test"},
+					{Run: "deno run script.ts"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-terraform should not report terraform as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "hashicorp/setup-terraform@v3"},
+					{Run: "terraform init"},
+					{Run: "terraform plan"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-uv should not report uv as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "astral-sh/setup-uv@v1"},
+					{Run: "uv pip install"},
+					{Run: "uv run script.py"},
+				},
+			},
+			expectedMissing: nil,
+		},
+		{
+			name: "job with setup-beam should not report elixir/mix as missing",
+			job: &Job{
+				RunsOn: "ubuntu-latest",
+				Steps: []Step{
+					{Uses: "erlef/setup-beam@v1"},
+					{Run: "elixir -v"},
+					{Run: "mix test"},
+				},
+			},
+			expectedMissing: nil,
+		},
 	}
 
 	for _, tt := range tests {

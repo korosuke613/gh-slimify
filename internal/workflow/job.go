@@ -5,6 +5,37 @@ import (
 	"strings"
 )
 
+// setupActionCommands maps setup actions to the commands they provide.
+// When a setup action is present in a job, these commands should not be
+// reported as missing even if they're not in ubuntu-slim by default.
+//
+// This includes:
+// - GitHub official setup actions (actions/setup-*)
+// - Verified creator setup actions from GitHub Marketplace
+//
+// References:
+// - https://github.com/marketplace?query=setup&verification=verified_creator&type=actions
+var setupActionCommands = map[string][]string{
+	"actions/setup-go":              {"go"},
+	"actions/setup-node":            {"node", "npm", "npx"},
+	"actions/setup-python":          {"python", "python3", "pip", "pip3"},
+	"actions/setup-java":            {"java", "javac", "mvn", "gradle"},
+	"actions/setup-dotnet":          {"dotnet"},
+	"actions/setup-ruby":            {"ruby", "gem"},
+	"hashicorp/setup-terraform":     {"terraform"},
+	"hashicorp/setup-packer":        {"packer"},
+	"oven-sh/setup-bun":             {"bun"},
+	"astral-sh/setup-uv":            {"uv"},
+	"erlef/setup-beam":              {"erl", "elixir", "mix", "rebar3", "hex"},
+	"microsoft/setup-msbuild":       {"msbuild"},
+	"denoland/setup-deno":           {"deno"},
+	"jfrog/setup-jfrog-cli":         {"jfrog"},
+	"supabase/setup-cli":            {"supabase"},
+	"aws-actions/setup-sam":         {"sam"},
+	"gruntwork-io/setup-terragrunt": {"terragrunt"},
+	"pdm-project/setup-pdm":         {"pdm"},
+}
+
 var (
 	// containerCommandPatterns lists regex patterns that match container commands
 	// Each pattern is compiled and checked against run commands.
@@ -106,11 +137,16 @@ func (j *Job) HasContainer() bool {
 // that exist in ubuntu-latest but are missing in ubuntu-slim.
 // It parses shell commands from step.Run fields and checks them against the
 // missing commands list.
+// Commands provided by setup actions (e.g., setup-go provides "go") are excluded
+// from the missing commands list since they will be available after the setup action runs.
 func (j *Job) GetMissingCommands() []string {
 	if !j.IsUbuntuLatest() {
 		// Only check commands for ubuntu-latest jobs
 		return nil
 	}
+
+	// Collect commands provided by setup actions in this job
+	setupProvidedCommands := j.getSetupProvidedCommands()
 
 	var missingCommands []string
 	seen := make(map[string]bool)
@@ -128,6 +164,11 @@ func (j *Job) GetMissingCommands() []string {
 				continue
 			}
 
+			// Skip if command is provided by a setup action
+			if setupProvidedCommands[cmdName] {
+				continue
+			}
+
 			// Check if command is missing in slim and not already added
 			if IsMissingInSlim(cmdName) && !seen[cmdName] {
 				missingCommands = append(missingCommands, cmdName)
@@ -137,6 +178,32 @@ func (j *Job) GetMissingCommands() []string {
 	}
 
 	return missingCommands
+}
+
+// getSetupProvidedCommands returns a map of commands that are provided by setup actions
+// in this job. The map keys are command names, and values are always true.
+func (j *Job) getSetupProvidedCommands() map[string]bool {
+	providedCommands := make(map[string]bool)
+
+	for _, step := range j.Steps {
+		if step.Uses == "" {
+			continue
+		}
+
+		// Check if this step uses a setup action
+		// Setup actions typically follow the pattern: actions/setup-<lang>@<version>
+		// We match the base action name without version
+		for actionPrefix, commands := range setupActionCommands {
+			if strings.HasPrefix(step.Uses, actionPrefix) {
+				// This setup action provides these commands
+				for _, cmd := range commands {
+					providedCommands[cmd] = true
+				}
+			}
+		}
+	}
+
+	return providedCommands
 }
 
 // extractCommands extracts command names from a shell script string.

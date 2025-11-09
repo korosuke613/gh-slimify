@@ -191,7 +191,7 @@ A job is eligible for migration to `ubuntu-slim` if **all** of the following con
 7. ⚠️ Jobs using commands that exist in `ubuntu-latest` but not in `ubuntu-slim` (e.g. `nvm`) will be flagged with warnings but are still eligible for migration. You may need to add setup steps to install these tools in `ubuntu-slim`.
 
 > [!NOTE]
-> The missing command detection is not complete. It cannot detect commands installed via setup actions (e.g., `actions/setup-go@v5`). These actions typically install tools that may not be available in `ubuntu-slim` by default, so manual verification is recommended.
+> **Setup Action Detection**: If a job uses popular setup actions from GitHub Marketplace (e.g., `actions/setup-go`,`hashicorp/setup-terraform`), the commands provided by those actions (e.g., `go`, `terraform`) will **not** be flagged as missing. This is because these setup actions install the necessary tools, making the job safe to migrate. The tool recognizes setup actions from GitHub Marketplace's verified creators, including official GitHub actions and popular third-party actions.
 
 If any condition is violated, the job will **not** be migrated.
 
@@ -217,8 +217,6 @@ jobs:
       - uses: actions/setup-node@v4
       - run: npm run lint
 ```
-
-**Result:** ✅ Eligible — No Docker, services, or containers
 
 ### Example 2: Docker Build Job ❌
 
