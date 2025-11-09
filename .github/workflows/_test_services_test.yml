@@ -1,6 +1,6 @@
 # This is a test workflow file for integration testing.
 # GitHub Actions is disabled for this workflow.
-name: Integration Test - Services_test
+name: Integration Test - Docker Compose Services_test
 
 on:
   push:
@@ -11,8 +11,8 @@ on:
       - 'never-run-this-workflow'
 
 jobs:
-  database-test:
-    name: Database Integration Test
+  docker-compose-test:
+    name: Docker Compose Integration Test
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -38,27 +38,121 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testdb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
       
-      - name: Test PostgreSQL connection
-        run: |
-          echo "Testing PostgreSQL connection"
-          PGPASSWORD=postgres psql -h localhost -U postgres -d testdb -c "SELECT version();" || echo "PostgreSQL test skipped"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       
-      - name: Test Redis connection
+      - name: Create Docker Compose file
         run: |
-          echo "Testing Redis connection"
-          redis-cli -h localhost ping || echo "Redis test skipped"
+          cat > docker-compose.test.yml <<EOF
+          version: '3.8'
+          services:
+            app:
+              build:
+                context: .
+                dockerfile: Dockerfile
+              environment:
+                POSTGRES_HOST: postgres
+                REDIS_HOST: redis
+                MYSQL_HOST: mysql
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+                mysql:
+                  condition: service_healthy
+            postgres:
+              image: postgres:18
+              environment:
+                POSTGRES_PASSWORD: postgres
+                POSTGRES_USER: postgres
+                POSTGRES_DB: testdb
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U postgres"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+            redis:
+              image: redis:8-alpine
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+            mysql:
+              image: mysql:8.0
+              environment:
+                MYSQL_ROOT_PASSWORD: root
+                MYSQL_DATABASE: testdb
+              healthcheck:
+                test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+          EOF
+      
+      - name: Build Docker Compose services
+        run: docker compose -f docker-compose.test.yml build
+      
+      - name: Start Docker Compose services
+        run: docker compose -f docker-compose.test.yml up -d
+      
+      - name: Wait for services to be ready
+        run: |
+          docker compose -f docker-compose.test.yml ps
+          sleep 10
+      
+      - name: Test PostgreSQL connection from container
+        run: |
+          docker compose -f docker-compose.test.yml exec -T app sh -c "PGPASSWORD=postgres psql -h postgres -U postgres -d testdb -c 'SELECT version();'" || echo "PostgreSQL test skipped"
+      
+      - name: Test Redis connection from container
+        run: |
+          docker compose -f docker-compose.test.yml exec -T app sh -c "redis-cli -h redis ping" || echo "Redis test skipped"
+      
+      - name: Test MySQL connection from container
+        run: |
+          docker compose -f docker-compose.test.yml exec -T app sh -c "mysql -h mysql -uroot -proot -e 'SELECT VERSION();'" || echo "MySQL test skipped"
+      
+      - name: Run integration tests in container
+        run: |
+          docker compose -f docker-compose.test.yml exec -T app go test -v ./... -tags=integration || echo "Integration tests completed"
+      
+      - name: View container logs
+        if: always()
+        run: |
+          docker compose -f docker-compose.test.yml logs app
+          docker compose -f docker-compose.test.yml logs postgres
+          docker compose -f docker-compose.test.yml logs redis
+      
+      - name: Stop Docker Compose services
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
 
 # Expected results when running 'gh slimfy':
 # - 0 candidate jobs detected
 #   - runs-on: ubuntu-latest ✓
-#   - No Docker commands ✓
+#   - Has Docker commands (docker compose) ✗
 #   - No container actions ✓
-#   - Has services (postgres, redis) ✗ (disqualifies migration)
+#   - Has services (postgres, redis, mysql) ✗ (disqualifies migration)
 #   - No container syntax ✓
 # - Output: "No jobs found that can be safely migrated to ubuntu-slim."
 

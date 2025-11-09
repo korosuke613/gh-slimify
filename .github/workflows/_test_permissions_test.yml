@@ -1,6 +1,6 @@
 # This is a test workflow file for integration testing.
 # GitHub Actions is disabled for this workflow.
-name: Integration Test - Permissions_test
+name: Integration Test - Docker Registry Permissions_test
 
 on:
   push:
@@ -12,48 +12,127 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
-  checks: write
+  packages: write
+  attestations: write
 
 jobs:
-  permission-test:
-    name: Permission Test
+  docker-read-permission-test:
+    name: Docker Read Permission Test
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: read
-      pull-requests: read
+      packages: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Container Registry (read-only)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Display permissions
         run: |
           echo "Job-level permissions applied"
           echo "Contents: read"
-          echo "Issues: read"
-          echo "Pull Requests: read"
+          echo "Packages: read"
       
-      - name: Test workflow
-        run: echo "Permission test completed"
+      - name: Pull Docker image (read-only test)
+        run: |
+          docker pull ghcr.io/${{ github.repository }}/test-image:latest || echo "Image pull test completed (may not exist)"
+          docker images | grep test-image || echo "No test image found"
 
-  write-permission-test:
-    name: Write Permission Test
+  docker-write-permission-test:
+    name: Docker Write Permission Test
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      issues: write
+      contents: read
+      packages: write
+      attestations: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
       
-      - name: Test write permissions
-        run: echo "Write permission test completed"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Container Registry (write)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build Docker image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}/permission-test:latest -f - <<EOF
+          FROM alpine:latest
+          RUN echo "Permission test image"
+          CMD ["echo", "Permission test"]
+          EOF
+      
+      - name: Tag Docker image
+        run: |
+          docker tag ghcr.io/${{ github.repository }}/permission-test:latest \
+            ghcr.io/${{ github.repository }}/permission-test:${{ github.sha }}
+      
+      - name: Push Docker image (write permission test)
+        run: |
+          docker push ghcr.io/${{ github.repository }}/permission-test:latest || echo "Push test completed (may fail due to permissions)"
+          docker push ghcr.io/${{ github.repository }}/permission-test:${{ github.sha }} || echo "Push test completed"
+      
+      - name: Generate SBOM
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: ghcr.io/${{ github.repository }}/permission-test:sbom
+          sbom: true
+          provenance: true
+
+  docker-container-permission-test:
+    name: Docker Container Permission Test
+    runs-on: ubuntu-latest
+    container:
+      image: docker:24-dind
+      options: --privileged
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Test Docker daemon access
+        run: |
+          docker ps
+          docker images
+          docker info
+      
+      - name: Build image in container
+        run: |
+          docker build -t test-container-build:latest -f - <<EOF
+          FROM alpine:latest
+          RUN apk add --no-cache curl
+          CMD ["curl", "--version"]
+          EOF
+      
+      - name: Run container with limited permissions
+        run: |
+          docker run --rm --read-only --tmpfs /tmp test-container-build:latest curl --version || echo "Container test completed"
 
 # Expected results when running 'gh slimfy':
-# - 2 candidate jobs detected: permission-test, write-permission-test
-#   - permission-test: runs-on: ubuntu-latest ✓, no Docker/containers/services ✓
-#   - write-permission-test: runs-on: ubuntu-latest ✓, no Docker/containers/services ✓
-# - Output: ".github/workflows/_test_permissions_test.yml\n  - job \"permission-test\" (L20) → ubuntu-slim compatible\n  - job \"write-permission-test\" (L41) → ubuntu-slim compatible\n\nTotal: 2 job(s) can be safely migrated."
+# - 0 candidate jobs detected
+#   - docker-read-permission-test: runs-on: ubuntu-latest ✓, but has Docker commands ✗
+#   - docker-write-permission-test: runs-on: ubuntu-latest ✓, but has Docker commands ✗
+#   - docker-container-permission-test: runs-on: ubuntu-latest ✓, but has container syntax ✗
+# - Output: "No jobs found that can be safely migrated to ubuntu-slim."
 
