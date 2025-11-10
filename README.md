@@ -8,26 +8,6 @@
 >`ubuntu-slim` is currently in **public preview** and may change before general availability. 
 >Please review GitHub's official documentation for the latest updates and breaking changes.
 
-
-## 🎯 Motivation
-
-GitHub Actions recently introduced the lightweight `ubuntu-slim` runner (1 vCPU / 5 GB RAM, max 15 min runtime) as a cost-efficient alternative to `ubuntu-latest`. However, manually identifying which workflows can safely migrate is tedious and error-prone:
-
-- ❌ Jobs using Docker commands or containers cannot migrate
-- ❌ Jobs using `services:` containers are incompatible
-- ❌ Jobs exceeding 15 minutes will fail
-- ❌ Container-based GitHub Actions are not supported
-
-**`gh-slimify` automates this entire process**, analyzing your workflows and safely migrating eligible jobs with a single command.
-
-## 📦 Installation
-
-Install as a GitHub CLI extension:
-
-```bash
-gh extension install fchimpan/gh-slimify
-```
-
 > [!TIP] 
 > 💡 Wait, couldn't you just copy-paste the following prompt into AI agent and skip using this tool altogether? 🤔😏 *Spoiler alert: You'll be back.*
 > ```md
@@ -55,6 +35,25 @@ gh extension install fchimpan/gh-slimify
 > 
 > Based on these rules, review each workflow and migrate every eligible job to ubuntu-slim. Afterward, report both the jobs that were successfully migrated and, for those that were not, the specific reasons they were ineligible.
 > ```
+
+## 🎯 Motivation
+
+GitHub Actions recently [introduced the lightweight `ubuntu-slim` runner](https://github.blog/changelog/2025-10-28-1-vcpu-linux-runner-now-available-in-github-actions-in-public-preview/) (1 vCPU / 5 GB RAM, max 15 min runtime) as a cost-efficient alternative to `ubuntu-latest`. However, manually identifying which workflows can safely migrate is tedious and error-prone:
+
+- ❌ Jobs using Docker commands or containers cannot migrate
+- ❌ Jobs using `services:` containers are incompatible
+- ❌ Jobs exceeding 15 minutes will fail
+- ❌ Container-based GitHub Actions are not supported
+
+**`gh-slimify` automates this entire process**, analyzing your workflows and safely migrating eligible jobs with a single command.
+
+## 📦 Installation
+
+Install as a GitHub CLI extension:
+
+```bash
+gh extension install fchimpan/gh-slimify
+```
 
 > [!NOTE]
 > At the time of writing, GitHub has not officially published a list of tools pre-installed on `ubuntu-slim` runners. Therefore, the tool detection for missing commands is **uncertain** and based on assumptions. The tool may incorrectly flag commands as missing (false positives) or miss commands that are actually missing (false negatives). Always verify manually before migrating critical workflows.
