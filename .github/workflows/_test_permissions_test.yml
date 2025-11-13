@@ -87,7 +87,7 @@ jobs:
           docker push ghcr.io/${{ github.repository }}/permission-test:${{ github.sha }} || echo "Push test completed"
       
       - name: Generate SBOM
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: false
@@ -99,7 +99,7 @@ jobs:
     name: Docker Container Permission Test
     runs-on: ubuntu-latest
     container:
-      image: docker:24-dind
+      image: docker:28-dind
       options: --privileged
     permissions:
       contents: read

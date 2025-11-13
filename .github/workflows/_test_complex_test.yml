@@ -122,7 +122,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
@@ -152,7 +152,7 @@ jobs:
       name: ${{ github.event.inputs.environment || 'production' }}
       url: https://example.com
     container:
-      image: docker:24-dind
+      image: docker:28-dind
       options: --privileged
     steps:
       - name: Checkout code
